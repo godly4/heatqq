@@ -9,17 +9,20 @@ Covering (-9000,9000)*(-18000,18000) points
 import os
 import sys
 import json
-import time
+import shutil
+import ctypes
 import logging
 import urllib2
 import signal
 import datetime
+import platform
 import subprocess
 import logging.config
+import mail
+import time as atime
+from util.const import receiveList
 from apscheduler.schedulers.background import BackgroundScheduler
 
-# save all 18000*36000 points in a dict 
-points = dict()
 # Get process id
 pid = os.getpid()
 # init logger handler
@@ -27,6 +30,8 @@ logger = None
 
 def graceful_exit(signum, frame):
     print 'Shutdown task immediately and exit ...'
+    for rec in receiveList:
+        mail.send(rec, "HeatQQ程序崩溃了", "程序异常退出,请确认!") 
     sys.exit(0)
 
 # Catch `ctrl+C` or `kill -HUP` signal
@@ -80,50 +85,86 @@ def init():
 	logging.config.fileConfig('logging.conf')
 	logger = logging.getLogger('heat')
 
+def judgeCompress(time):
+    """
+        check whether to compress the archive
+    """
+    yesterday = (time - datetime.timedelta(days=1)).strftime("%F")
+    dirName = "data/{0}".format(yesterday)
+    if os.path.exists(dirName):
+        shutil.make_archive(dirName,"zip",dirName)
+        shutil.rmtree(dirName)
+        for rec in receiveList:
+            mail.send(rec, dirName+"数据压缩完成", "昨日数据{0}已压缩完毕,请确认!".format(dirName))
+
+def judgeDisk(diskName):
+    """
+        check whether the disk is almost full!
+    """
+    ret = 0
+    if platform.system() == 'Windows':
+        free_bytes = ctypes.c_ulonglong(0)
+        ctypes.windll.kernel32.GetDiskFreeSpaceExW(ctypes.c_wchar_p(dirName), None, None, ctypes.pointer(free_bytes))
+        ret = (free_bytes.value/1024/1024/1024)
+    else:
+        st = os.statvfs(diskName)
+        ret = (st.f_bavail * st.f_frsize/1024/1024)
+
+    if ret<= 1:
+        for rec in receiveList:
+            mail.send(rec, "云主机磁盘报警!","云主机磁盘低于1G,请注意") 
+        os.kill(pid,signal.SIGINT)
+
 def job_function():
-	""" 1. get origin data from the website
-		2. format
-		3. record processed data into .csv file
-	"""
-	
-	timeNow = datetime.datetime.now().strftime("%F %T")
-	base_url = "http://xingyun.map.qq.com/api/getPointsByTime_all_new.php?count=4&rank={rank}&time={time}"
-	logger.info("Task begin ...")
-	originData = ""
-	timeSysNow = timeNow
-	for i in range(4):
-		url = base_url.format(rank=i,time=timeNow)
-		retryTime = 3
-		ret = json.loads(httpRequest(url,retryTime))
-		if ret == "failed":
-			logger.error("Http request {0} failed after {1} times").format(url, retryTime)
-			os.kill(pid,signal.SIGINT)
-		
-		timeSysNow = ret["time"]
-		originData += ret["locs"]
+    """ 1. get origin data from the website
+        2. format
+        3. record processed data into .csv file
+    """
+    time = datetime.datetime.now()
+    #判断是否启用压缩
+    judgeCompress(time)
+    #判断磁盘是否存在报警
+    judgeDisk("C:\\")
+    dateNow = time.strftime("%F")
+    timeNow = time.strftime("%T")
+    base_url = "http://xingyun.map.qq.com/api/getPointsByTime_all_new.php?count=4&rank={rank}&time={time}"
+    logger.info("Task begin ...")
+    originData = ""
+    timeSysNow = dateNow+" "+timeNow
+    for i in range(4):
+        url = base_url.format(rank=i,time=timeSysNow)
+        retryTime = 3
+        ret = json.loads(httpRequest(url,retryTime))
+        if ret == "failed":
+            logger.error("Http request {0} failed after {1} times").format(url, retryTime)
+            os.kill(pid,signal.SIGINT)
 
-	if not os.path.exists("data"):
-		create("data","d")
+        timeSysNow = ret["time"]
+        originData += ret["locs"]
 
-	with open("data/{0}.csv".format(timeSysNow),"w") as f:
-		f.write("lat,lng,qqheat\n")
-		count = 0
-		dataList = originData.split(',')
-		while count <= len(dataList)-3:
-			f.write("{0},{1},{2}\n".format(int(dataList[count])/100.0,int(dataList[count+1])/100.0,dataList[count+2]))
-			count += 3
+    currentDir = "data/{0}".format(dateNow)
+    if not os.path.exists(currentDir):
+        create(currentDir,"d")
 
-	logger.info("Task end, get all data at {0}".format(timeSysNow))
+    with open(currentDir+"/{0}.csv".format(timeSysNow),"w") as f:
+        f.write("lat,lng,qqheat\n")
+        count = 0
+        dataList = originData.split(',')
+        while count <= len(dataList)-3:
+            f.write("{0},{1},{2}\n".format(int(dataList[count])/100.0,int(dataList[count+1])/100.0,dataList[count+2]))
+            count += 3
+
+    logger.info("Task end, get all data at {0}".format(timeSysNow))
 
 if __name__ == "__main__":
-	init()
-	print('Press `Ctrl+{0}` or run `kill -HUP` to exit gracefully'.format('Break' if os.name == 'nt' else 'C'))
-	scheduler = BackgroundScheduler()
-	scheduler.add_job(job_function, 'interval', minutes=5, max_instances=10)
-	scheduler.start()
+    init()
+    print('Press `Ctrl+{0}` or run `kill -HUP` to exit gracefully'.format('Break' if os.name == 'nt' else 'C'))
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(job_function, 'interval', minutes=5, max_instances=10)
+    scheduler.start()
 
-	try:
-		while True:
-			time.sleep(2)
-	except (KeyboardInterrupt, SystemExit):
-		scheduler.shutdown()
+    try:
+        while True:
+            atime.sleep(2)
+    except (KeyboardInterrupt, SystemExit):
+        scheduler.shutdown()
