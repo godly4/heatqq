@@ -7,7 +7,6 @@ Covering (-9000,9000)*(-18000,18000) points
 """
 
 import os
-import sys
 import json
 import shutil
 import ctypes
@@ -23,6 +22,10 @@ import time as atime
 from util.const import receiveList
 from apscheduler.schedulers.background import BackgroundScheduler
 
+import sys
+reload(sys)
+sys.setdefaultencoding('utf-8')
+
 # Get process id
 pid = os.getpid()
 # init logger handler
@@ -31,7 +34,7 @@ logger = None
 def graceful_exit(signum, frame):
     print 'Shutdown task immediately and exit ...'
     for rec in receiveList:
-        mail.send(rec, "HeatQQ程序崩溃了", "程序异常退出,请确认!") 
+        mail.send(rec, "HeatQQ program crashed", "The program crashed, please confirm!") 
     sys.exit(0)
 
 # Catch `ctrl+C` or `kill -HUP` signal
@@ -54,7 +57,7 @@ def httpRequest(url,retry=1):
 def create(name,type=""):
 	"""mkdir or touch file"""
 	if type == "d":
-		cmd = "mkdir -p {0}".format(name)
+		cmd = "mkdir \"{0}\"".format(name)
 		ret = subprocess.call(cmd,shell=True)
 		if ret != 0:
 			print "Create directory {0} failed!".format(name) , cmd
@@ -89,13 +92,13 @@ def judgeCompress(time):
     """
         check whether to compress the archive
     """
-    yesterday = (time - datetime.timedelta(days=1)).strftime("%F")
+    yesterday = (time - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
     dirName = "data/{0}".format(yesterday)
     if os.path.exists(dirName):
         shutil.make_archive(dirName,"zip",dirName)
         shutil.rmtree(dirName)
         for rec in receiveList:
-            mail.send(rec, dirName+"数据压缩完成", "昨日数据{0}已压缩完毕,请确认!".format(dirName))
+            mail.send(rec, dirName+" has been compressed", "Last day's({0}) data has been compressed, please confirm!".format(dirName))
 
 def judgeDisk(diskName):
     """
@@ -104,7 +107,7 @@ def judgeDisk(diskName):
     ret = 0
     if platform.system() == 'Windows':
         free_bytes = ctypes.c_ulonglong(0)
-        ctypes.windll.kernel32.GetDiskFreeSpaceExW(ctypes.c_wchar_p(dirName), None, None, ctypes.pointer(free_bytes))
+        ctypes.windll.kernel32.GetDiskFreeSpaceExW(ctypes.c_wchar_p(diskName), None, None, ctypes.pointer(free_bytes))
         ret = (free_bytes.value/1024/1024/1024)
     else:
         st = os.statvfs(diskName)
@@ -112,7 +115,7 @@ def judgeDisk(diskName):
 
     if ret<= 1:
         for rec in receiveList:
-            mail.send(rec, "云主机磁盘报警!","云主机磁盘低于1G,请注意") 
+            mail.send(rec, "Disk alert!","Remain less than 1 GB, please confirm!") 
         os.kill(pid,signal.SIGINT)
 
 def job_function():
@@ -125,8 +128,8 @@ def job_function():
     judgeCompress(time)
     #判断磁盘是否存在报警
     judgeDisk("C:\\")
-    dateNow = time.strftime("%F")
-    timeNow = time.strftime("%T")
+    dateNow = time.strftime("%Y-%m-%d")
+    timeNow = time.strftime("%H:%M:%S")
     base_url = "http://xingyun.map.qq.com/api/getPointsByTime_all_new.php?count=4&rank={rank}&time={time}"
     logger.info("Task begin ...")
     originData = ""
@@ -146,6 +149,7 @@ def job_function():
     if not os.path.exists(currentDir):
         create(currentDir,"d")
 
+    timeSysNow = timeSysNow.replace(" ","_").replace(":","-")
     with open(currentDir+"/{0}.csv".format(timeSysNow),"w") as f:
         f.write("lat,lng,qqheat\n")
         count = 0
@@ -159,6 +163,7 @@ def job_function():
 if __name__ == "__main__":
     init()
     print('Press `Ctrl+{0}` or run `kill -HUP` to exit gracefully'.format('Break' if os.name == 'nt' else 'C'))
+    #job_function()
     scheduler = BackgroundScheduler()
     scheduler.add_job(job_function, 'interval', minutes=5, max_instances=10)
     scheduler.start()
