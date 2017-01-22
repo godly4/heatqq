@@ -50,9 +50,9 @@ def httpRequest(url,retry=1):
 		if res.getcode() == 200:
 			return res.read()
 		else:
-			httpRequest(url,retry-1)
+			return httpRequest(url,retry-1)
 	except:
-		httpRequest(url,retry-1)
+		return httpRequest(url,retry-1)
 
 def create(name,type=""):
 	"""mkdir or touch file"""
@@ -137,7 +137,12 @@ def job_function():
     for i in range(4):
         url = base_url.format(rank=i,time=timeSysNow)
         retryTime = 3
-        ret = json.loads(httpRequest(url,retryTime))
+        result = httpRequest(url,retryTime)
+        if result == "failed":
+            for rec in receiveList:
+                mail.send(rec, "HttpRequest error!","Request {0} is failed!Please check!".format(url))
+            os.kill(pid,signal.SIGINT)
+        ret = json.loads(result)
         if ret == "failed":
             logger.error("Http request {0} failed after {1} times").format(url, retryTime)
             os.kill(pid,signal.SIGINT)
