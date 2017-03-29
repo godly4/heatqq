@@ -146,7 +146,7 @@ def job_function():
     if not os.path.exists(currentDir):
         create(currentDir,"d")
 
-    with open(currentDir+"/{0}.csv".format(timeSysNow),"w") as f:
+    with open(currentDir+"/{0}.csv".format(timeSysNow.replace(" ","_")),"w") as f:
         f.write("lat,lng,qqheat\n")
         count = 0
         dataList = originData.split(',')

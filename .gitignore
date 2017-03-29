@@ -2,3 +2,6 @@
 util/
 logs/
 *.log
+*.pid
+*.out
+data/
