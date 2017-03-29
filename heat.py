@@ -108,7 +108,7 @@ def judgeDisk(diskName):
         ret = (free_bytes.value/1024/1024/1024)
     else:
         st = os.statvfs(diskName)
-        ret = (st.f_bavail * st.f_frsize/1024/1024)
+        ret = (st.f_bavail * st.f_frsize/1024/1024/1024)
 
     if ret<= 1:
         for rec in receiveList:
@@ -124,7 +124,7 @@ def job_function():
     #判断是否启用压缩
     judgeCompress(time)
     #判断磁盘是否存在报警
-    judgeDisk("C:\\")
+    judgeDisk("/")
     dateNow = time.strftime("%F")
     timeNow = time.strftime("%T")
     base_url = "http://xingyun.map.qq.com/api/getPointsByTime_all_new.php?count=4&rank={rank}&time={time}"

@@ -1,0 +1,4 @@
+*.pyc
+util/
+logs/
+*.log
