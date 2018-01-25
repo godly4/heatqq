@@ -7,6 +7,8 @@ Covering (-9000,9000)*(-18000,18000) points
 """
 
 import os
+os.chdir("/home/project/heatqq")
+
 import sys
 import json
 import shutil
@@ -85,18 +87,6 @@ def init():
 	logging.config.fileConfig('logging.conf')
 	logger = logging.getLogger('heat')
 
-def judgeCompress(time):
-    """
-        check whether to compress the archive
-    """
-    yesterday = (time - datetime.timedelta(days=1)).strftime("%F")
-    dirName = "data/{0}".format(yesterday)
-    if os.path.exists(dirName):
-        shutil.make_archive(dirName,"zip",dirName)
-        shutil.rmtree(dirName)
-        for rec in receiveList:
-            mail.send(rec, dirName+"数据压缩完成", "昨日数据{0}已压缩完毕,请确认!".format(dirName))
-
 def judgeDisk(diskName):
     """
         check whether the disk is almost full!
@@ -122,7 +112,7 @@ def job_function():
     """
     time = datetime.datetime.now()
     #判断是否启用压缩
-    judgeCompress(time)
+    #judgeCompress(time)
     #判断磁盘是否存在报警
     judgeDisk("/")
     dateNow = time.strftime("%F")
@@ -146,7 +136,7 @@ def job_function():
     if not os.path.exists(currentDir):
         create(currentDir,"d")
 
-    with open(currentDir+"/{0}.csv".format(timeSysNow.replace(" ","_")),"w") as f:
+    with open(currentDir+"/{0}.csv".format(timeSysNow.replace(" ","_").replace(":","-")),"w") as f:
         f.write("lat,lng,qqheat\n")
         count = 0
         dataList = originData.split(',')
@@ -158,13 +148,14 @@ def job_function():
 
 if __name__ == "__main__":
     init()
-    print('Press `Ctrl+{0}` or run `kill -HUP` to exit gracefully'.format('Break' if os.name == 'nt' else 'C'))
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(job_function, 'interval', minutes=5, max_instances=10)
-    scheduler.start()
+    job_function()
+    #print('Press `Ctrl+{0}` or run `kill -HUP` to exit gracefully'.format('Break' if os.name == 'nt' else 'C'))
+    #scheduler = BackgroundScheduler()
+    #scheduler.add_job(job_function, 'interval', minutes=5, max_instances=10)
+    #scheduler.start()
 
-    try:
-        while True:
-            atime.sleep(2)
-    except (KeyboardInterrupt, SystemExit):
-        scheduler.shutdown()
+    #try:
+    #    while True:
+    #        atime.sleep(2)
+    #except (KeyboardInterrupt, SystemExit):
+    #    scheduler.shutdown()
